@@ -1,3 +1,69 @@
+# How to use
+とりあえず Detection + Tracking を動かすための手順をまとめる。
+
+## 環境構築
+CUDA のver. が古いため Docker を推奨。 `docker`の中にDockerfile が含まれている。
+
+<br>
+
+以下に*MOT*フォーマットのデータを使って訓練&評価する場合の手順を示す。
+## データの準備
+### ダウンロード
+MOT Challenge のデータが[公開](https://motchallenge.net/) されているのでそちらからダウンロードする。以下は`MOT15`の例.
+
+```bash
+$ mkdir data
+$ cd data
+$ wget https://motchallenge.net/data/MOT15.zip
+$ unzip MOT15.zip
+```
+
+### コンバート
+複数のフォーマットを統一的に扱うため, mmtracking では [CocoVID](https://github.com/open-mmlab/mmtracking/blob/master/mmtrack/datasets/parsers/coco_video_parser.py) というフォーマットを用いる. MOTもこのフォーマットにコンバートする必要がある. `MOT15` の場合は次のようにする.
+
+```bash
+$ python ./tools/convert_datasets/mot/mot2coco.py -i ./data/MOT15/ -o ./data/MOT15/annotations --split-train --convert-det
+$ python ./tools/convert_datasets/mot/mot2reid.py -i ./data/MOT15/ -o ./data/MOT15/reid --val-split 0.2 --vis-threshold 0.3
+```
+
+ref: https://github.com/kevin3314/mmtracking/blob/master/docs/en/dataset.md#2-convert-annotations
+
+
+## モデルの訓練
+mmtracking では1つのconfigファイル(python ファイル)でモデル/データなど一連のデータを管理する。
+例として、 [Tracking without bells and whistles](https://arxiv.org/abs/1903.05625) のモデルを訓練する際の手順を示す。(NOTE: 雑に動かすだけなら配布されている学習済みの重みを使えるため、モデルを訓練する必要はない。)\
+このモデルでは, Detection, ReID のためのモデルをそれぞれ訓練する必要がある。
+
+```bash
+$ python ./tools/train.py ./configs/det/faster-rcnn_r50_fpn_4e_mot15-half.py
+$ python ./tools/train.py ./configs/reid/resnet50_b32x8_MOT15.py
+```
+
+## モデルの評価
+2D bbox, tracking それぞれの指標でモデルを評価するには次のようにする。
+```bash
+$ python ./tools/test.py configs/mot/tracktor/tracktor_faster-rcnn_r50_fpn_4e_mot15-public-half.py --eval bbox
+$ python ./tools/test.py configs/mot/tracktor/tracktor_faster-rcnn_r50_fpn_4e_mot15-public-half.py --eval track
+```
+学習した自前の重みを使うためには, configファイル中の *checkpoint* の値を書き換える。
+```
+model = dict(
+    detector=dict(
+        init_cfg=dict(
+            type='Pretrained',
+            checkpoint='/path/to/ckpt.pth'
+        )),
+    reid=dict(
+        head=dict(num_classes=375),
+        init_cfg=dict(
+            type='Pretrained',
+            checkpoint='/path/to/ckpt.pth'
+        )))
+```
+
+
+***
+
 <div align="center">
   <img src="resources/mmtrack-logo.png" width="600"/>
 </div>
